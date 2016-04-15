@@ -1,0 +1,174 @@
+
+<style>
+	body {
+		text-align: center;
+	}
+	button {
+		display: none;
+		margin: 0 auto;
+	}
+	img {
+	  margin: 0 auto;
+	  width: 200px;
+	}
+	#info span {
+		color: red;
+	}
+</style>
+<body>
+	<div id="loading">Checking if logined</div>
+	<div id="info"></div>
+	<div id="user"></div>
+	<button id="login">Login</button>
+	<button id="logout">Logout</button>
+
+	
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.0.0-beta1/jquery.min.js"></script>
+	<script src="https://cdn.firebase.com/js/client/2.4.2/firebase.js"></script>
+	<script>
+	var 
+	 	$login = $('#login'),
+	 	$logout = $('#logout'),
+	 	$loading = $('#loading'),
+	 	$info = $('#info'),
+	    $user = $('#user');
+
+	var storedUserData;
+
+	var CONSOLE = {};
+	CONSOLE.initial = console;
+	CONSOLE.upgrade = function(userData, fbRef, styles) {
+        var defaultStyles = 'font-family: Monospace; color: purple; font-size: 13px';
+        styles = styles || defaultStyles;
+
+        console.say = function(str) { 
+            fbRef.push({
+              text: " %c " + userData.name + ': %c' + str,
+              user: userData.name,
+              styles: styles
+              
+            });
+          
+        }
+	  };
+
+	  CONSOLE.restore = function() { 
+	  	console.say = function() { console.info( 'You are not logged in! Log in' ) }
+	  }
+
+	   
+	var DOM = {
+
+	  isLogined: function(userData) {
+	    $loading.hide(); // must be initial
+	    $login.hide(); // if shown
+	    $logout.show();
+	    $info.html('You are logined via Google!' + '<span> + Go to console! + </span>');
+	    $user.html('<div>' + userData.name + '</div>'); 
+	    $('<img/>').attr('src', userData.photo).appendTo($user);
+	    $user.show(); // if hidden
+	  },
+
+	  isNotLogined: function() {
+	    $loading.hide(); // must be initial
+	    $logout.hide(); // if shown
+	    $login.show();
+	    $info.text('You are logged out');
+	    $user.hide(); // if shown
+	  }
+	}
+
+		// Firebase
+	  var FB_REFS = {};
+	  FB_REFS.root = new Firebase("https://memoria.firebaseio.com");
+	  FB_REFS.users = FB_REFS.root.child('users');
+	  FB_REFS.messages = FB_REFS.root.child('messages');
+
+	  FB_REFS.messages.on("child_added", function(snapshot, prevChildKey) {
+	     var msg = snapshot.val();
+
+	     /*	 msg
+				{
+				  "styles": "font-family: Arial; font-size: 2em;",
+				  "text": " %c Алексей Леонов:%c text, ''",
+				  "user": "Алексей Леонов"
+				}
+	     */
+
+	    CONSOLE.initial.log(msg.text, msg.styles, 'font-size: 15px');
+	  });
+		// Base functions
+
+			function checkIfExists(parentRef, key, callback) {
+				parentRef.child(key).once('value', function(snapshot) {
+					var val = snapshot.val();
+		        	var exists = (val !== null);
+		        	callback(key, exists, val)
+				});
+			}
+
+			function googleAuth() {
+				FB_REFS.root.authWithOAuthPopup("google", function(error, authData) {
+
+				  if (error) {
+				    console.info("Login Failed!", error);
+				  } else {
+				    console.info("Authenticated successfully with payload:", authData);
+				  }
+				});
+			}
+
+			// Auth callbacks
+
+				// Register the callback to be fired every time auth state changes
+				FB_REFS.root.onAuth(function(authData) { // We can login only on our home and empty pages
+					if (authData){ // logined
+						console.info('Auth listener: Logged in...');
+						console.log('%cUse \'console.say()\' command to say something...', 'color: purple; font-size: 2em; font-style: italic');
+						DOM.isLogined({
+						    name: authData.google.displayName,
+						    photo: authData.google.profileImageURL
+							});
+
+						storedUserData = {
+							name: authData.google.displayName,
+							photo: authData.google.profileImageURL,
+							uid: authData.uid
+						}
+	          
+	          			CONSOLE.upgrade(storedUserData, FB_REFS.messages, null);
+	          
+						// save profile if not exists in fb					
+						checkIfExists(FB_REFS.users, authData.uid, function(uid, exists){
+							if (!exists) {
+								FB_REFS.root.child("users").child(uid).set({
+								  name: authData.google.displayName,
+								  photo: authData.google.profileImageURL
+								});
+							}
+						});
+					} else {
+						// not logined
+						console.info('Auth listener: Not logged in...');
+						CONSOLE.restore();
+						DOM.isNotLogined();
+					}
+				});
+
+	$login.click(function(){
+	  googleAuth();
+	});
+
+	$logout.click(function(){
+	  FB_REFS.root.unauth(function(){
+	    //on logout callback
+	  });
+	});
+
+
+
+
+
+
+	</script>
+</body>
